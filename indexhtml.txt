@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rifa da Sorte!</title>
+    <!-- Carrega Tailwind CSS via CDN para estilização rápida e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos personalizados para a fonte e alguns ajustes */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Cor de fundo suave */
+        }
+        /* Esconde a barra de rolagem em navegadores WebKit (Chrome, Safari) */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        /* Esconde a barra de rolagem para Firefox */
+        html {
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 sm:p-8 bg-gradient-to-br from-blue-100 to-purple-100">
+
+    <!-- Container para o modal personalizado (não use alert() ou confirm()) -->
+    <div id="custom-modal-container"></div>
+
+    <header class="text-center mb-8">
+        <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-800 leading-tight">Rifa da Sorte!</h1>
+        <p class="text-xl sm:text-2xl text-purple-700 mt-2">Escolha seu bilhete e participe!</p>
+    </header>
+
+    <main class="bg-white rounded-xl shadow-2xl p-6 sm:p-8 max-w-4xl w-full">
+        <h2 class="text-3xl font-bold text-center text-blue-700 mb-6">Bilhetes Disponíveis (0 a 150)</h2>
+
+        <!-- Grid de Bilhetes -->
+        <div id="tickets-grid" class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-16 gap-2 sm:gap-3 mb-8">
+            <!-- Bilhetes serão renderizados aqui pelo JavaScript -->
+        </div>
+
+        <!-- Formulário de Compra (inicialmente oculto) -->
+        <form id="purchase-form" class="bg-blue-50 p-6 rounded-lg shadow-inner border border-blue-200 hidden">
+            <h3 id="form-title" class="text-2xl font-semibold text-blue-700 mb-4 text-center">Comprar Bilhete X</h3>
+            <div class="grid grid-cols-1 gap-4 mb-4"> <!-- Removido md:grid-cols-2 pois só há um campo -->
+                <div>
+                    <label for="buyerName" class="block text-gray-700 font-medium mb-2">Seu Nome:</label>
+                    <input
+                        type="text"
+                        id="buyerName"
+                        class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                    />
+                </div>
+                <!-- Campos de Telefone e Chave Pix removidos -->
+            </div>
+            <!-- Div mb-6 que continha o campo Pix para recebimento removida -->
+
+            <!-- Chave Pix do Vendedor -->
+            <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg mb-6">
+                <p class="font-bold text-lg">Para Finalizar a Compra:</p>
+                <p class="mb-2">Por favor, realize o pagamento do bilhete para a seguinte chave Pix do vendedor:</p>
+                <p id="seller-pix-key" class="font-mono text-xl text-green-800 break-all"></p>
+                <p class="mt-2 text-sm">Após o pagamento, o bilhete será confirmado.</p>
+            </div>
+
+            <div class="flex justify-center flex-wrap gap-4">
+                <button
+                    type="submit"
+                    class="px-8 py-4 bg-green-600 text-white rounded-full font-bold text-lg shadow-lg hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 w-full sm:w-auto"
+                >
+                    Comprar Bilhete!
+                </button>
+                <button
+                    type="button"
+                    id="cancel-button"
+                    class="px-8 py-4 bg-gray-400 text-white rounded-full font-bold text-lg shadow-lg hover:bg-gray-500 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 w-full sm:w-auto"
+                >
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </main>
+
+    <footer class="text-center text-gray-600 text-sm mt-8">
+        <p>&copy; 2024 Rifa da Sorte. Todos os direitos reservados.</p>
+    </footer>
+
+    <script>
+        // --- Variáveis Globais e Configurações ---
+        const totalTickets = 151; // Bilhetes de 0 a 150 (total de 151 bilhetes)
+        const localStorageKey = 'rifaTicketsData'; // Chave para armazenar dados no localStorage
+        const sellerPixKey = 'julianagrazielly@icloud.com'; // Chave Pix do vendedor
+
+        let tickets = []; // Array para armazenar o estado de cada bilhete
+        let selectedTicketNumber = null; // Número do bilhete atualmente selecionado
+
+        // --- Referências a Elementos do DOM ---
+        const ticketsGrid = document.getElementById('tickets-grid');
+        const purchaseForm = document.getElementById('purchase-form');
+        const formTitle = document.getElementById('form-title');
+        const buyerNameInput = document.getElementById('buyerName');
+        // Referências a buyerPhoneInput e pixKeyInput removidas
+        const cancelButton = document.getElementById('cancel-button');
+        const sellerPixKeyDisplay = document.getElementById('seller-pix-key');
+
+        // --- Função para Modal Personalizado (Substitui alert() e confirm()) ---
+        function showCustomModal(message, type = 'info') {
+            const modalContainer = document.getElementById('custom-modal-container');
+            if (!modalContainer) {
+                console.error("Elemento 'custom-modal-container' não encontrado.");
+                return;
+            }
+
+            const modal = document.createElement('div');
+            modal.className = `fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center p-4 z-50`;
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full transform transition-all duration-300 ease-out scale-95 opacity-0" id="custom-modal-content">
+                    <p class="text-lg font-semibold text-gray-800 mb-4">${message}</p>
+                    <div class="flex justify-end">
+                        <button class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">OK</button>
+                    </div>
+                </div>
+            `;
+
+            modalContainer.appendChild(modal);
+
+            // Animação de entrada
+            setTimeout(() => {
+                const modalContent = document.getElementById('custom-modal-content');
+                if (modalContent) {
+                    modalContent.classList.remove('scale-95', 'opacity-0');
+                    modalContent.classList.add('scale-100', 'opacity-100');
+                }
+            }, 10);
+
+            // Fechar modal ao clicar em OK
+            modal.querySelector('button').onclick = () => {
+                // Animação de saída
+                const modalContent = document.getElementById('custom-modal-content');
+                if (modalContent) {
+                    modalContent.classList.remove('scale-100', 'opacity-100');
+                    modalContent.classList.add('scale-95', 'opacity-0');
+                    setTimeout(() => {
+                        modalContainer.removeChild(modal);
+                    }, 300);
+                }
+            };
+        }
+
+        // --- Função para Inicializar ou Carregar Bilhetes ---
+        function initializeTickets() {
+            const storedTickets = localStorage.getItem(localStorageKey);
+            if (storedTickets) {
+                tickets = JSON.parse(storedTickets);
+                // Ajusta o array de tickets se o totalTickets mudou
+                if (tickets.length !== totalTickets) {
+                    const newTickets = [];
+                    for (let i = 0; i < totalTickets; i++) {
+                        const existingTicket = tickets.find(t => t.number === i);
+                        if (existingTicket) {
+                            newTickets.push(existingTicket);
+                        } else {
+                            newTickets.push({ number: i, isSold: false, buyerName: '' });
+                        }
+                    }
+                    tickets = newTickets;
+                    saveTickets(); // Salva o novo array ajustado
+                }
+            } else {
+                // Inicializa todos os bilhetes como não vendidos
+                for (let i = 0; i < totalTickets; i++) {
+                    tickets.push({
+                        number: i,
+                        isSold: false,
+                        buyerName: '',
+                        // buyerPhone e pixKey não são mais armazenados
+                    });
+                }
+                saveTickets(); // Salva o estado inicial
+            }
+        }
+
+        // --- Função para Salvar Bilhetes no localStorage ---
+        function saveTickets() {
+            localStorage.setItem(localStorageKey, JSON.stringify(tickets));
+        }
+
+        // --- Função para Renderizar os Bilhetes na Grid ---
+        function renderTickets() {
+            ticketsGrid.innerHTML = ''; // Limpa a grid antes de renderizar
+            tickets.forEach(ticket => {
+                const button = document.createElement('button');
+                button.dataset.ticketNumber = ticket.number;
+                button.className = `
+                    p-2 sm:p-3 rounded-md font-bold text-sm sm:text-base
+                    transition duration-200 ease-in-out transform hover:scale-105
+                    flex flex-col items-center justify-center text-center
+                    ${ticket.isSold
+                        ? 'bg-red-500 text-white cursor-not-allowed opacity-80'
+                        : selectedTicketNumber === ticket.number
+                            ? 'bg-green-500 text-white shadow-md ring-2 ring-green-700'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }
+                `;
+                button.disabled = ticket.isSold; // Desabilita se vendido
+
+                // Conteúdo do botão: número do bilhete e nome do comprador (se vendido)
+                button.innerHTML = `
+                    <span>${ticket.number}</span>
+                    ${ticket.isSold ? `<span class="text-xs font-normal mt-1 truncate w-full px-1">${ticket.buyerName.split(' ')[0]}</span>` : ''}
+                `;
+
+                button.addEventListener('click', () => handleTicketSelect(ticket.number));
+                ticketsGrid.appendChild(button);
+            });
+        }
+
+        // --- Função para Lidar com a Seleção de Bilhetes ---
+        function handleTicketSelect(ticketNumber) {
+            const ticket = tickets.find(t => t.number === ticketNumber);
+
+            if (ticket.isSold) {
+                showCustomModal('Este bilhete já está vendido. Por favor, escolha outro.');
+                return;
+            }
+
+            // Desseleciona o bilhete anterior se houver
+            if (selectedTicketNumber !== null && selectedTicketNumber !== ticketNumber) {
+                const prevSelectedButton = ticketsGrid.querySelector(`[data-ticket-number="${selectedTicketNumber}"]`);
+                if (prevSelectedButton) {
+                    prevSelectedButton.classList.remove('bg-green-500', 'text-white', 'shadow-md', 'ring-2', 'ring-green-700');
+                    prevSelectedButton.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                }
+            }
+
+            selectedTicketNumber = ticketNumber;
+            formTitle.textContent = `Comprar Bilhete ${selectedTicketNumber}`;
+            purchaseForm.classList.remove('hidden'); // Mostra o formulário
+
+            // Limpa os campos do formulário
+            buyerNameInput.value = '';
+            // buyerPhoneInput e pixKeyInput não são mais limpos
+        }
+
+        // --- Função para Lidar com a Compra do Bilhete ---
+        purchaseForm.addEventListener('submit', (e) => {
+            e.preventDefault(); // Previne o recarregamento da página
+
+            if (selectedTicketNumber === null) {
+                showCustomModal('Por favor, selecione um bilhete para comprar.');
+                return;
+            }
+
+            const buyerName = buyerNameInput.value.trim();
+            // buyerPhone e pixKey não são mais lidos do input
+
+            if (!buyerName) { // Apenas valida o nome
+                showCustomModal('Por favor, preencha seu nome.');
+                return;
+            }
+
+            // Encontra o bilhete no array e atualiza seu estado
+            const ticketIndex = tickets.findIndex(t => t.number === selectedTicketNumber);
+            if (ticketIndex !== -1) {
+                tickets[ticketIndex] = {
+                    ...tickets[ticketIndex],
+                    isSold: true,
+                    buyerName: buyerName,
+                    // buyerPhone e pixKey não são mais armazenados
+                };
+                saveTickets(); // Salva as mudanças no localStorage
+                renderTickets(); // Re-renderiza a grid para mostrar o bilhete como vendido
+
+                showCustomModal(`Bilhete ${selectedTicketNumber} comprado com sucesso! Por favor, realize o pagamento para a chave Pix do vendedor.`);
+
+                // Oculta o formulário e reseta a seleção
+                purchaseForm.classList.add('hidden');
+                selectedTicketNumber = null;
+            } else {
+                showCustomModal('Erro: Bilhete não encontrado. Tente novamente.');
+            }
+        });
+
+        // --- Função para Lidar com o Botão Cancelar ---
+        cancelButton.addEventListener('click', () => {
+            // Remove a seleção visual do bilhete
+            if (selectedTicketNumber !== null) {
+                const prevSelectedButton = ticketsGrid.querySelector(`[data-ticket-number="${selectedTicketNumber}"]`);
+                if (prevSelectedButton) {
+                    prevSelectedButton.classList.remove('bg-green-500', 'text-white', 'shadow-md', 'ring-2', 'ring-green-700');
+                    prevSelectedButton.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                }
+            }
+            purchaseForm.classList.add('hidden'); // Esconde o formulário
+            selectedTicketNumber = null; // Reseta o bilhete selecionado
+        });
+
+        // --- Inicialização do Aplicativo ---
+        window.onload = () => {
+            sellerPixKeyDisplay.textContent = sellerPixKey; // Exibe a chave Pix do vendedor
+            initializeTickets(); // Carrega ou inicializa os bilhetes
+            renderTickets(); // Renderiza os bilhetes na tela
+        };
+    </script>
+</body>
+</html>
